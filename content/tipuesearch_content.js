@@ -1,1 +1,1 @@
-var tipuesearch = {"pages": [{'title': 'About', 'text': 'cmsimde_site', 'tags': '', 'url': 'About.html'}]};
+var tipuesearch = {"pages": [{'title': 'About', 'text': 'cmsimde_site \n', 'tags': '', 'url': 'About.html'}, {'title': 'Schedule', 'text': 'week1 加入 teams 課程，建立 resume-github 帳號倉儲，分組協同專案 2a-pj1agx \n week2 228連假 \n week3 建立靜態網站', 'tags': '', 'url': 'Schedule.html'}]};
