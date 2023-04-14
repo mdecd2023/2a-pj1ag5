@@ -46,7 +46,72 @@ player" width="560"></iframe></p>
 <div class="winkVideoContainerClass"><video autoplay="autoplay" class="winkVideoClass" controls="controls" data-dirname="/cmsimde/static" data-varname="winkVideoData1" height="630" muted="true" width="1008">
 <source src="./../downloads/車車/車車4.mp4" type="video/mp4"/></video></div>
 <p><iframe allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen="allowfullscreen" frameborder="0" height="315" src="https://www.youtube.com/embed/Mm3NL32bzb0" title="YouTube video player" width="560"></iframe></p>
-<h2>w6</h2>
+<h2>lua</h2>
+<p>第 1-8 行定義了一個名為<span> </span><code>speedChange_callback</code><span> </span>的函數，用於當速度滑塊滑動時改變機器人的速度。</p>
+<p>第 10 行開始的<span> </span><code>sysCall_init</code><span> </span>函數是當腳本第一次執行時被執行的初始化函數。在這個函數中，定義了<span> </span><code>bubbleRobBase</code>、<code>leftMotor</code>、<code>rightMotor</code>、<code>noseSensor</code><span> </span>等機器人和元件的句柄，以及<span> </span><code>minMaxSpeed</code><span> </span>用於限制機器人的最小和最大速度，<code>backUntilTime</code><span> </span>用於標記機器人是否在倒退模式下移動，<code>robotCollection</code><span> </span>用於存儲機器人和其他元件的集合，<code>distanceSegment</code><span> </span>和<span> </span><code>robotTrace</code><span> </span>用於繪製機器人行走軌跡和檢測機器人與障礙物之間距離的線段。同時還創建了一個名為<span> </span><code>graph</code><span> </span>的圖形元件，用於繪製機器人行走時的遮蔽區域，以及<span> </span><code>distStream</code>，這是一個用於顯示機器人清晰度的圖形流。</p>
+<p>接下來的<span> </span><code>sysCall_sensing</code><span> </span>函數用於檢測機器人與其他元件之間的距離，如果檢測到了障礙物，則會在<span> </span><code>distanceSegment</code><span> </span>中添加新的線段以及在<span> </span><code>graph</code><span> </span>中更新機器人的遮蔽區域。同時，還會在<span> </span><code>robotTrace</code><span> </span>中添加新的軌跡。</p>
+<p>最後，<code>sysCall_actuation</code><span> </span>函數用於實際控制機器人的行動。如果機器人沒有檢測到障礙物，則會以<span> </span><code>speed</code><span> </span>的速度向前移動，否則會進入倒退模式，以較低的速度向後倒退，直到<span> </span><code>backUntilTime</code><span> </span>小於當前模擬時間為止。</p>
+<p>最後，在<span> </span><code>sysCall_cleanup</code><span> </span>函數中，用於清理並銷毀創建的 UI 元件。</p>
+<pre class="brush:lua;auto-links:false;toolbar:false" contenteditable="false">function speedChange_callback(ui,id,newVal)
+    speed=minMaxSpeed[1]+(minMaxSpeed[2]-minMaxSpeed[1])*newVal/100
+end
+ 
+function sysCall_init()
+    -- This is executed exactly once, the first time this script is executed
+    bubbleRobBase=sim.getObject('.') -- this is bubbleRob's handle
+    leftMotor=sim.getObject("./leftMotor") -- Handle of the left motor
+    rightMotor=sim.getObject("./rightMotor") -- Handle of the right motor
+    noseSensor=sim.getObject("./sensingNose") -- Handle of the proximity sensor
+    minMaxSpeed={50*math.pi/180,300*math.pi/180} -- Min and max speeds for each motor
+    backUntilTime=-1 -- Tells whether bubbleRob is in forward or backward mode
+    robotCollection=sim.createCollection(0)
+    sim.addItemToCollection(robotCollection,sim.handle_tree,bubbleRobBase,0)
+    distanceSegment=sim.addDrawingObject(sim.drawing_lines,4,0,-1,1,{0,1,0})
+    robotTrace=sim.addDrawingObject(sim.drawing_linestrip+sim.drawing_cyclic,2,0,-1,200,{1,1,0})
+    graph=sim.getObject('./Graph')
+    distStream=sim.addGraphStream(graph,'bubbleRob clearance','m',0,{1,0,0})
+    -- Create the custom UI:
+        xml = '&lt;ui title="'..sim.getObjectAlias(bubbleRobBase,1)..' speed" closeable="false" resizeable="false" activate="false"&gt;'..[[
+        &lt;hslider minimum="0" maximum="100" onchange="speedChange_callback" id="1"/&gt;
+        &lt;label text="" style="* {margin-left: 300px;}"/&gt;
+        &lt;/ui&gt;
+        ]]
+    ui=simUI.create(xml)
+    speed=(minMaxSpeed[1]+minMaxSpeed[2])*0.5
+    simUI.setSliderValue(ui,1,100*(speed-minMaxSpeed[1])/(minMaxSpeed[2]-minMaxSpeed[1]))
+end
+ 
+function sysCall_sensing()
+    local result,distData=sim.checkDistance(robotCollection,sim.handle_all)
+    if result&gt;0 then
+        sim.addDrawingObjectItem(distanceSegment,nil)
+        sim.addDrawingObjectItem(distanceSegment,distData)
+        sim.setGraphStreamValue(graph,distStream,distData[7])
+    end
+    local p=sim.getObjectPosition(bubbleRobBase,-1)
+    sim.addDrawingObjectItem(robotTrace,p)
+end
+ 
+function sysCall_actuation()
+    result=sim.readProximitySensor(noseSensor) -- Read the proximity sensor
+    -- If we detected something, we set the backward mode:
+    if (result&gt;0) then backUntilTime=sim.getSimulationTime()+4 end
+ 
+    if (backUntilTime&lt;sim.getSimulationTime()) then
+        -- When in forward mode, we simply move forward at the desired speed
+        sim.setJointTargetVelocity(leftMotor,speed)
+        sim.setJointTargetVelocity(rightMotor,speed)
+    else
+        -- When in backward mode, we simply backup in a curve at reduced speed
+        sim.setJointTargetVelocity(leftMotor,-speed/2)
+        sim.setJointTargetVelocity(rightMotor,-speed/8)
+    end
+end
+ 
+function sysCall_cleanup()
+    simUI.destroy(ui)
+end</pre>
+<p></p><h2>w6</h2>
 <p>完成連線-</p>
 <p>ag1(<span>41023147 41023143</span>)</p>
 <p><span>ag2(41023146 41023148)</span></p>
@@ -106,3 +171,5 @@ player" width="560"></iframe></p>
 <p><img alt="" height="572" src="/images/計分.png" width="1016"/></p>
 <p><a href="/downloads/sensor.txt">sensor.txt</a> <a href="/downloads/sensor2.txt">sensor2.txt</a> <a href="/downloads/newbing_bubbleRob.rar">newbing_bubbleRob.rar</a></p>
 <p><iframe allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen="allowfullscreen" frameborder="0" height="315" src="https://www.youtube.com/embed/zCCj7oN0XuA" title="YouTube video player" width="560"></iframe></p>
+<p>兩車競賽影片</p>
+<p><iframe allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen="allowfullscreen" frameborder="0" height="315" src="https://www.youtube.com/embed/yxFX1Op0uQA" title="YouTube video player" width="560"></iframe></p>
